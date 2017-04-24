@@ -1,0 +1,57 @@
+#!/usr/bin/env ruby
+
+require 'aws-sdk'
+
+def make_content_of_size(size)
+  "x" * size
+end
+
+bucket = ARGV[0]
+test_key_prefix = ARGV[1] || "test-multipart-upload"
+
+s3_client = Aws::S3::Client.new(region: "eu-west-1") # should be: region of bucket
+
+key = test_key_prefix + "." + Time.now.to_f.to_s
+
+part_sizes = [ 5 ]
+
+upload = s3_client.create_multipart_upload(
+  bucket: bucket,
+  key: key,
+)
+
+parts = part_sizes.each_with_index.map do |size, index|
+  part_number = index + 1
+
+  r = s3_client.upload_part(
+    bucket: bucket,
+    key: key,
+    upload_id: upload.upload_id,
+    part_number: part_number,
+    body: make_content_of_size(size),
+    content_length: size,
+  )
+
+#   r = s3_client.upload_part_copy(
+#     bucket: bucket,
+#     key: key,
+#     upload_id: upload.upload_id,
+#     part_number: part_number,
+#     copy_source: "bucket/key",
+#     copy_source_range: "bytes=0-#{size}", # off-by-one?
+#   )
+
+  { part_number: part_number, etag: r.etag }
+end
+
+completion = s3_client.complete_multipart_upload(
+  bucket: bucket,
+  key: key,
+  upload_id: upload.upload_id,
+  multipart_upload: {
+    parts: parts,
+  },
+)
+p completion
+
+# eof test-multipart-upload
